@@ -7,7 +7,7 @@ This library allows type tests and transformation and can be used for data loadi
 Usage
 -----
 
-Simple type-checking::
+Simple type-checking:
 
 ```python
 import typed
