@@ -23,9 +23,9 @@ assert not t1.test(None)
 
 t2 = typed.list(typed.int)
 
-assert t1.test([1, 2, 3])
-assert t1.test([])
-assert not t1.test(['a', 'b', 'c'])
+assert t2.test([1, 2, 3])
+assert t2.test([])
+assert not t2.test(['a', 'b', 'c'])
 
 t3 = typed.list(typed.int | typed.string)
 
