@@ -1,4 +1,25 @@
-import numbers, types, datetime
+"""
+	t = typed.int | typed.string
+	assert t.test(1)
+	assert t.test('foo')
+	assert not t.test(True)
+
+	t1 = typed.int | typed.none
+	t2 = typed.set(1,2,5) | typed.string
+	t3 = typed.number | None
+	t4 = typed.date | typed.datetime.format("%Y-%m-%d %H:%M:%S")
+	t5 = typed.range(0, 1.5) | typed.int.range(-1, 1) | typed.float.range(4, 5.2) | typed.range('a', 'z')
+	t6 = typed.list(typed.string) | typed.list(typed.int)
+	t7 = typed.list(typed.string | typed.int)
+	t8 = typed.tuple(typed.int, typed.string, typed.bool)
+	t9 = typed.dict({'a': typed.bool, 'b': typed.int}) | typed.dict(a=typed.int, b=typed.bool)
+
+	assert 1 == typed.int.cast('1')
+	assert '2' == typed.str.cast(2)
+	assert datetime.datetime(2012, 12, 12, 12, 12, 12) == typed.datetime.format("%Y-%m-%d %H:%M:%S").cast('2012-12-12 12:12:12')
+"""
+
+import types, datetime, json, itertools
 
 class O(object):
 	pass
@@ -17,6 +38,10 @@ python.datetime = datetime
 python.list = list
 python.dict = dict
 python.any = any
+python.json = json
+python.tuple = tuple
+python.types = types
+python.iter = iter
 
 
 class Type(object):
@@ -47,6 +72,13 @@ class Type(object):
 			raise ValueError('object has invalid type')
 
 		return obj
+
+	def format(self, fmt):
+		if isinstance(fmt, python.dict):
+			return DictFormatType(self, fmt)
+		elif fmt is json:
+			return JSONFormatType(self)
+		raise NotImplementedError()
 
 	def __or__(self, another_type):
 		if another_type is None:
@@ -84,6 +116,7 @@ class PrimitiveType(Type):
 	def test(self, obj):
 		return isinstance(obj, self.type)
 
+
 class IntType(Type):
 	__slots__ = []
 	def __init__(self):
@@ -120,7 +153,7 @@ class UnionType(Type):
 				continue
 
 		raise ValueError('object matches none of the valid types')
-		
+
 	def save(self, obj):
 		for type in self.types:
 			try:
@@ -154,42 +187,65 @@ class SetType(Type):
 
 class DateType(Type):
 	__slots__ = []
+
 	def __init__(self):
 		pass
 
 	def test(self, obj):
 		return isinstance(obj, python.datetime.date) and not isinstance(obj, python.datetime.datetime)
 
+	def format(self, fmt):
+		if isinstance(fmt, basestring):
+			return DateFormatType(fmt)
+		else:
+			return super(DateType, self).format(fmt)
+
+
+class DateFormatType(Type):
+	__slots__ = ['fmt']
+
+	def __init__(self, fmt):
+		self.fmt = fmt
+
+	def test(self, obj):
+		return date.test(obj)
+
+	def load(self, obj):
+		try:
+			return python.datetime.datetime.strptime(obj, self.fmt).date()
+		except TypeError, e:
+			raise ValueError(e.message)
+
+	def save(self, obj):
+		if not date.test(obj):
+			raise ValueError('object is not a date')
+
+		return obj.strftime(self.fmt)
+
 
 class DatetimeType(PrimitiveType):
 	def __init__(self):
-		super(DatetimeType, self).__init__(datetime.datetime)
+		super(DatetimeType, self).__init__(python.datetime.datetime)
 
 	def format(self, fmt):
-		return FormattedDatetimeType(fmt)
+		if isinstance(fmt, basestring):
+			return DatetimeFormatType(fmt)
+		else:
+			return super(DatetimeType, self).format(fmt)
 
 
-class FormattedDatetimeType(Type):
-	__slots__ = ['format']
+class DatetimeFormatType(Type):
+	__slots__ = ['fmt']
 
 	def __init__(self, fmt):
-		self.format = fmt
+		self.fmt = fmt
 
 	def test(self, obj):
-		if not isinstance(obj, basestring):
-			return False
-		try:
-			python.datetime.datetime.strptime(obj, self.format)
-			return True
-		except ValueError:
-			return False
+		return isinstance(obj, python.datetime.datetime)
 
 	def load(self, obj):
-		if not isinstance(obj, basestring):
-			raise ValueError('object is not a string')
-
 		try:
-			return python.datetime.datetime.strptime(obj, self.format)
+			return python.datetime.datetime.strptime(obj, self.fmt)
 		except TypeError, e:
 			raise ValueError(e.message)
 
@@ -197,7 +253,7 @@ class FormattedDatetimeType(Type):
 		if not isinstance(obj, python.datetime.datetime):
 			raise ValueError('object is not a datetime')
 
-		return obj.strftime(self.format)
+		return obj.strftime(self.fmt)
 
 
 class ListType(Type):
@@ -235,17 +291,23 @@ class ListType(Type):
 
 
 class DictType(Type):
-	__slots__ = ['fields']
+	__slots__ = ['fields', 'trim']
 
-	def __init__(self, fields_dict):
-		self.fields = frozenset(fields_dict.iteritems())
+	def __init__(self, fields_dict, trim=False):
+		self.fields = fields_dict
+		self.trim = trim
+
+	def make_trimmed(self):
+		return DictType(self.fields, trim=True)
+
+	trimmed = property(make_trimmed)
 
 	def test(self, obj):
 		if not isinstance(obj, python.dict):
 			return False
 
 		num = 0
-		for field, type in self.fields:
+		for field, type in self.fields.iteritems():
 			try:
 				value = obj[field]
 			except KeyError:
@@ -257,7 +319,7 @@ class DictType(Type):
 				return False
 			num += 1
 
-		if len(obj) > num:
+		if not self.trim and len(obj) > num:
 			return False
 
 		return True
@@ -267,7 +329,7 @@ class DictType(Type):
 			raise ValueError('object is not a dict')
 
 		num = 0
-		for field, type in self.fields:
+		for field, type in self.fields.iteritems():
 			try:
 				value = obj[field]
 			except KeyError:
@@ -283,7 +345,12 @@ class DictType(Type):
 			num += 1
 
 		if len(obj) > num:
-			raise ValueError('dict has unexpected fields')
+			if self.trim:
+				for field in obj.keys():
+					if not field in self.fields:
+						del obj[field]
+			else:
+				raise ValueError('dict has unexpected fields')
 
 		return obj
 
@@ -292,7 +359,7 @@ class DictType(Type):
 			raise ValueError('object is not a dict')
 
 		num = 0
-		for field, type in self.fields:
+		for field, type in self.fields.iteritems():
 			try:
 				value = obj[field]
 			except KeyError:
@@ -300,16 +367,21 @@ class DictType(Type):
 					continue
 				raise ValueError('dict is missing field %s' % repr(field))
 
-			num += 1
-
 			if isinstance(type, DefaultType) and value == type.default_value:
 				del obj[field]
 				continue
 
+			num += 1
+
 			obj[field] = type.save(value)
 
 		if len(obj) > num:
-			raise ValueError('dict has additional fields')
+			if self.trim:
+				for field in obj.keys():
+					if not field in self.fields:
+						del obj[field]
+			else:
+				raise ValueError('dict has additional fields')
 
 		return obj
 
@@ -329,6 +401,9 @@ class OptionalType(Type):
 	def save(self, obj):
 		return self.type.save(obj)
 
+	def format(self, fmt):
+		return self.type.format(fmt).optional
+
 
 class DefaultType(OptionalType):
 	__slots__ = ['default_value']
@@ -337,12 +412,132 @@ class DefaultType(OptionalType):
 		self.type = type
 		self.default_value = default_value
 
+	def format(self, fmt):
+		return self.type.format(fmt).default(self.default_value)
+
+
+class DictFormatType(Type):
+	__slots__ = ['type', 'save_dict', 'load_dict']
+
+	def __init__(self, type, save_dict):
+		load_dict = {}
+		for key, value in save_dict.iteritems():
+			load_dict[value] = key
+
+		self.save_dict = save_dict
+		self.load_dict = load_dict
+		self.type = type
+
+	def test(self, obj):
+		return self.type.test(obj)
+
+	def load(self, obj):
+		try:
+			val = self.load_dict[obj]
+		except KeyError:
+			val = obj
+		return self.type.load(val)
+
+	def save(self, obj):
+		obj = self.type.save(obj)
+		try:
+			return self.save_dict[obj]
+		except KeyError:
+			return obj
+
+
+class JSONFormatType(Type):
+	__slots__ = ['type']
+
+	def __init__(self, type):
+		self.type = type
+
+	def test(self, obj):
+		return self.type.test(obj)
+
+	def load(self, obj):
+		return self.type.load(python.json.loads(obj))
+
+	def save(self, obj):
+		return python.json.dumps(self.type.save(obj))
+
+
+class TupleType(Type):
+	__slots__ = ['types']
+
+	def __init__(self, types):
+		self.types = types
+
+	def test(self, obj):
+		if not isinstance(obj, python.tuple):
+			return False
+
+		if len(obj) != len(self.types):
+			return False
+
+		return all(type.test(item) for type, item in itertools.izip(self.types, obj))
+
+	def load(self, obj):
+		if not isinstance(obj, python.tuple):
+			raise ValueError('object is not a tuple')
+
+		if len(obj) != len(self.types):
+			if len(obj) > len(self.types):
+				raise ValueError('too many items')
+			else:
+				raise ValueError('not enough items')
+
+		return python.tuple(type.load(item) for type, item in itertools.izip(self.types, obj))
+
+	def save(self, obj):
+		if not isinstance(obj, python.tuple):
+			raise ValueError('object is not a tuple')
+
+		if len(obj) != len(self.types):
+			if len(obj) > len(self.types):
+				raise ValueError('too many items')
+			else:
+				raise ValueError('not enough items')
+
+		return python.tuple(type.save(item) for type, item in itertools.izip(self.types, obj))
+
+	def format(self, fmt):
+		if fmt is list:
+			return ListTupleFormatType(self)
+		else:
+			return super(TupleType, self).format(fmt)
+
+
+class ListTupleFormatType(Type):
+	__slots__ = ['type']
+
+	def __init__(self, type):
+		if not isinstance(type, TupleType):
+			raise TypeError('type must be a typed tuple type')
+
+		self.type = type
+
+	def test(self, obj):
+		return self.type.test(obj)
+
+	def load(self, obj):
+		if not isinstance(obj, python.list):
+			raise ValueError('object is not a list')
+		return self.type.load(python.tuple(obj))
+
+	def save(self, obj):
+		return python.list(self.type.save(obj))
+
+
+
+
+
 
 
 
 int = integer = IntType()
 float = PrimitiveType(python.float)
-null = none = PrimitiveType(types.NoneType)
+null = none = PrimitiveType(python.types.NoneType)
 ascii = str = PrimitiveType(python.str)
 unicode = PrimitiveType(python.unicode)
 string = PrimitiveType(basestring)
@@ -370,8 +565,17 @@ def dict(fields_dict):
 
 	return DictType(fields_dict)
 
+def tuple(*types):
+	if not all(isinstance(type, Type) for type in types):
+		raise TypeError('typed.tuple() arguments must be typed types')
+
+	return TupleType(types)
+
 any = AnyType()
 optional = any.optional
 
 def default(value):
 	return any.default(value)
+
+def json(type):
+	return JSONFormatType(type)

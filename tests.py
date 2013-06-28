@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import datetime
+import datetime, json
 
 import unittest
 
@@ -119,21 +119,6 @@ class TestTypedTest(unittest.TestCase):
 		self.assertItemsEqual(t3.values, [1, 2, 3, None, 'a'])
 
 
-	def test_formatted_datetime(self):
-		datetime_formats = ['%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%A, %d. %B %Y %I:%M%p']
-		dt = datetime.datetime.now()
-
-		for datetime_format in datetime_formats:
-			t = typed.datetime.format(datetime_format)
-
-			dt_str = dt.strftime(datetime_format)
-			self.assertTrue(t.test(dt_str), msg=dt_str)
-
-		self.assertTrue(isinstance(t, typed.FormattedDatetimeType))
-
-		for value in [datetime.datetime.now(), 1, 'a', True, [1, 2, 3], 1.2, None, {'a': 1}, self]:
-			self.assertFalse(t.test(value))
-
 	def test_list(self):
 		self.assertRaises(TypeError, typed.list, int)
 
@@ -144,6 +129,7 @@ class TestTypedTest(unittest.TestCase):
 		self.assertTrue(t1.test([]))
 
 		self.assertFalse(t1.test([1, '2', None]))
+		self.assertFalse(t1.test(tuple([1, 2, 3])))
 
 		for value in [datetime.datetime.now(), 1, 'a', True, [1.2, 2.3, 3.4], 1.2, None, {'a': 1}, self]:
 			self.assertFalse(t1.test(value))
@@ -188,6 +174,40 @@ class TestTypedTest(unittest.TestCase):
 		self.assertFalse(t.test({'a': 1, 'b': True, 'c': 'foo'}))
 		self.assertFalse(t.test({'a': 1, 'b': True, 'c': [1, 2, 3]}))
 		self.assertFalse(t.test({'a': 1, 'b': True, 'c': ['X', 'Y'], 'd': 'bar'}))
+
+
+	def test_trimmed_dict(self):
+		t = typed.dict({'a': typed.int, 'b': typed.bool}).trimmed
+
+		self.assertTrue(t.test({'a': 1, 'b': True}))
+		self.assertTrue(t.test({'a': 1, 'b': True, 'c': "string"}))
+		self.assertTrue(t.test({'a': 1, 'b': True, 'c': 0, 'd': 0, 'e': 0, 'f': 0}))
+
+		self.assertFalse(t.test({}))
+		self.assertFalse(t.test({'a': 1, 'b': 0.01}))
+		self.assertFalse(t.test({'a': 1}))
+		self.assertFalse(t.test({'a': 1, 'c': 0, 'd': 0, 'e': 0, 'f': 0}))
+
+
+	def test_tuple(self):
+		self.assertRaises(TypeError, typed.tuple, int, bool)
+
+		t1 = typed.tuple(typed.int, typed.bool)
+
+		self.assertTrue(t1.test(tuple([1, True])))
+		self.assertTrue(t1.test(tuple([4, False])))
+
+		self.assertFalse(t1.test(tuple([1])))
+		self.assertFalse(t1.test(tuple([1, True, False])))
+		self.assertFalse(t1.test(tuple([True, 1])))
+		self.assertFalse(t1.test([1, True]))
+
+		for value in [datetime.datetime.now(), 1, 'a', True, [1.2, 2.3, 3.4], 1.2, None, {'a': 1}, self]:
+			self.assertFalse(t1.test(value))
+
+		t2 = t1.format(typed.list)
+
+		self.assertFalse(t2.test([1, True]))
 
 
 class TestTypedLoadSave(unittest.TestCase):
@@ -381,6 +401,191 @@ class TestTypedLoadSave(unittest.TestCase):
 		self.assertRaises(ValueError, t.save, {'a': '', 'd': 2})
 		self.assertRaises(ValueError, t.save, {'a': '', 'e': '2012-12-12T12:12:12'})
 		self.assertRaises(ValueError, t.save, {'a': '', 'h': 'foo'})
+		self.assertRaises(ValueError, t.save, {'a': '', 'c': False, 'd': 0, 'g': None, 'h': 1, 't': 0, 'u': 0, 'v': 0})
+
+	def test_trimmed_dict(self):
+		t = typed.dict({
+				'a': typed.string,
+				'b': typed.int.optional,
+				'c': typed.bool.default(False)
+			}).trimmed
+
+
+		self.assertEqual(t.load({'a': ''}), {'a': '', 'c': False})
+		self.assertEqual(t.load({'a': '', 'b': 2}), {'a': '', 'b': 2, 'c': False})
+		self.assertEqual(t.load({'a': '', 'c': True}), {'a': '', 'c': True})
+		self.assertEqual(t.load({'a': '', 'b': 2, 'c': True}), {'a': '', 'b': 2, 'c': True})
+
+		self.assertEqual(t.load({'a': '', 'd': 1, 'e': 0}), {'a': '', 'c': False})
+		self.assertEqual(t.load({'a': '', 'b': 2, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'b': 2, 'c': False})
+		self.assertEqual(t.load({'a': '', 'c': True, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'c': True})
+		self.assertEqual(t.load({'a': '', 'b': 2, 'c': True, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'b': 2, 'c': True})
+
+		self.assertEqual(t.save({'a': ''}), {'a': ''})
+		self.assertEqual(t.save({'a': '', 'c': False}), {'a': ''})
+		self.assertEqual(t.save({'a': '', 'c': True}), {'a': '', 'c': True})
+		self.assertEqual(t.save({'a': '', 'b': 2}), {'a': '', 'b': 2})
+		self.assertEqual(t.save({'a': '', 'b': 2, 'c': True}), {'a': '', 'b': 2, 'c': True})
+
+		self.assertEqual(t.save({'a': '', 'd': 1, 'e': 0}), {'a': ''})
+		self.assertEqual(t.save({'a': '', 'c': False, 'd': 1, 'e': 0, 'f': -1}), {'a': ''})
+		self.assertEqual(t.save({'a': '', 'b': 2, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'b': 2})
+		self.assertEqual(t.save({'a': '', 'b': 2, 'c': False, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'b': 2})
+		self.assertEqual(t.save({'a': '', 'b': 2, 'c': True, 'd': 1, 'e': 0, 'f': -1}), {'a': '', 'b': 2, 'c': True})
+
+		self.assertRaises(ValueError, t.load, {})
+		self.assertRaises(ValueError, t.load, {'a': '', 'b': 'foo'})
+		self.assertRaises(ValueError, t.load, {'a': '', 'c': 2})
+
+
+	def test_format_datetime(self):
+		datetime_formats = ['%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%A, %d. %B %Y %I:%M%p']
+		dt = datetime.datetime.now()
+
+		for datetime_format in datetime_formats:
+			t = typed.datetime.format(datetime_format)
+
+			self.assertTrue(t.test(dt))
+
+			dt_str = dt.strftime(datetime_format)
+			new_dt = datetime.datetime.strptime(dt_str, datetime_format)
+
+			self.assertEqual(t.save(dt), dt_str)
+			self.assertEqual(t.load(dt_str), new_dt)
+
+
+	def test_format_date(self):
+		datetime_formats = ['%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%A, %d. %B %Y %I:%M%p']
+		dt = datetime.date.today()
+
+		for datetime_format in datetime_formats:
+			t = typed.date.format(datetime_format)
+
+			self.assertTrue(t.test(dt))
+
+			dt_str = dt.strftime(datetime_format)
+			new_dt = datetime.datetime.strptime(dt_str, datetime_format).date()
+
+			self.assertEqual(t.save(dt), dt_str)
+			self.assertEqual(t.load(dt_str), new_dt)
+
+
+	def test_format_dict(self):
+		t1 = typed.dict({
+				'a': typed.int.format({1: 'one', 2: 'two'}),
+				'b': typed.bool.format({True: 1, False: 0}),
+			})
+
+		self.assertEqual(t1.load({'a': 1, 'b': True}), {'a': 1, 'b': True})
+		self.assertEqual(t1.load({'a': 'one', 'b': 1}), {'a': 1, 'b': True})
+		self.assertEqual(t1.load({'a': 'two', 'b': 0}), {'a': 2, 'b': False})
+		self.assertEqual(t1.load({'a': 3, 'b': True}), {'a': 3, 'b': True})
+
+		self.assertEqual(t1.save({'a': 1, 'b': True}), {'a': 'one', 'b': 1})
+		self.assertEqual(t1.save({'a': 2, 'b': False}), {'a': 'two', 'b': 0})
+		self.assertEqual(t1.save({'a': 3, 'b': True}), {'a': 3, 'b': 1})
+
+		self.assertRaises(ValueError, t1.load, {'a': 'three'})
+
+		t2 = (typed.int | typed.null).format({1: 'one', None: 'nothing'})
+
+		self.assertEqual(t2.load('one'), 1)
+		self.assertEqual(t2.load(1), 1)
+		self.assertEqual(t2.load(2), 2)
+		self.assertEqual(t2.load('nothing'), None)
+
+		self.assertEqual(t2.save(1), 'one')
+		self.assertEqual(t2.save(None), 'nothing')
+		self.assertEqual(t2.save(2), 2)
+
+		t3 = typed.bool.format({True: 1, False: 0}) | typed.int.format({0: 'zero', 1: 'one'})
+
+		self.assertEqual(t3.load('one'), 1)
+		self.assertEqual(t3.load('zero'), 0)
+		self.assertEqual(t3.load(3), 3)
+		self.assertEqual(t3.load(0), False)
+		self.assertEqual(t3.load(1), True)
+
+		self.assertEqual(t3.save(1), 'one')
+		self.assertEqual(t3.save(2), 2)
+		self.assertEqual(t3.save(0), 'zero')
+		self.assertEqual(t3.save(False), 0)
+		self.assertEqual(t3.save(True), 1)
+
+		t4 = typed.dict({
+				'a': typed.int.optional.format({1: 'one', 2: 'two'}),
+				'b': typed.bool.default(False).format({False: 'wrong', True: 'right'}),
+				'c': typed.float.format({1.0: '100%', 0.0: '0%'}).default(0.0),
+				'd': (typed.bool | typed.none).format({None: 'nothing'}).optional,
+				'e': typed.datetime.format('%Y-%m-%d %H:%M:%S').format({'1970-01-01 00:00:00': 'forever'}).optional,
+			})
+
+		self.assertEqual(t4.load({}), {'b': False, 'c': 0.0})
+		self.assertEqual(t4.load({'a': 3, 'b': True, 'c': 0.5, 'd': None, 'e': '2013-10-11 11:02:45'}), {'a': 3, 'b': True, 'c': 0.5, 'd': None, 'e': datetime.datetime(2013, 10, 11, 11, 02, 45)})
+		self.assertEqual(t4.load({'a': 'one', 'b': 'right', 'c': '0%', 'd': 'nothing', 'e': 'forever'}), {'a': 1, 'b': True, 'c': 0.0, 'd': None, 'e': datetime.datetime(1970, 01, 01, 00, 00, 00)})
+
+		self.assertEqual(t4.save({}), {})
+		self.assertEqual(t4.save({'a': 2, 'b': True, 'c': 1.0, 'd': True, 'e': datetime.datetime(2014, 12, 15, 16, 10, 32)}), {'a': 'two', 'b': 'right', 'c': '100%', 'd': True, 'e': '2014-12-15 16:10:32'})
+		self.assertEqual(t4.save({'a': 3, 'b': False, 'c': 0.0, 'd': None, 'e': datetime.datetime(1970, 01, 01, 00, 00, 00)}), {'a': 3, 'd': 'nothing', 'e': 'forever'})
+
+
+	def test_format_json(self):
+		t1 = typed.dict({
+				'a': typed.datetime.format('%Y-%m-%d %H:%M:%S').optional,
+				'b': (typed.string | typed.none).optional,
+				'c': typed.bool.format({True: 1, False: 0}).default(False),
+			})
+
+		t2 = typed.dict({
+				'd': typed.int,
+				'e': (typed.none | typed.date.format('%d/%m/%Y')).default(None),
+				'f': typed.list(typed.int),
+				'g': typed.json(t1).default(t1.load({})),
+			}).format(typed.json)
+
+		self.assertEqual(t2.load(json.dumps({'d': 1, 'f': []})), {'d': 1, 'e': None, 'f': [], 'g': {'c': False}})
+		self.assertEqual(t2.load(json.dumps({'d': 0, 'e': None, 'f': [1, 2], 'g': json.dumps({'b': None, 'c': 1})})), {'d': 0, 'e': None, 'f': [1, 2], 'g': {'b': None, 'c': True}})
+		self.assertEqual(t2.load(json.dumps({'d': 1, 'e': '15/02/2011', 'f': [], 'g': json.dumps({'a': '2013-11-11 16:16:16', 'b': 'foo', 'c': 0})})), {'d': 1, 'e': datetime.date(2011, 02, 15), 'f': [], 'g': {'a': datetime.datetime(2013, 11, 11, 16, 16, 16), 'b': 'foo', 'c': False}})
+
+		self.assertEqual(t2.save({'d': 1, 'f': [1, 2, 3, 4]}), json.dumps({'d': 1, 'f': [1, 2, 3, 4]}))
+		self.assertEqual(t2.save({'d': 1, 'e': None, 'f': [1, 2, 3, 4], 'g': {'c': False}}), json.dumps({'d': 1, 'f': [1, 2, 3, 4]}))
+		self.assertEqual(t2.save({'d': 1, 'e': datetime.date(2013, 02, 15), 'f': [], 'g': {'a': datetime.datetime(2013, 10, 10, 05, 55, 50), 'b': None, 'c': True}}), json.dumps({'d': 1, 'e': '15/02/2013', 'f': [], 'g': json.dumps({'a': '2013-10-10 05:55:50', 'b': None, 'c': 1})}))
+
+
+	def test_tuple(self):
+		t1 = typed.tuple(typed.int, typed.datetime.format('%Y-%m-%d %H:%M:%S'), typed.string | typed.none)
+
+		self.assertEqual(t1.load(tuple([4, '2013-10-11 11:02:45', 'foo'])), (4, datetime.datetime(2013, 10, 11, 11, 02, 45), 'foo'))
+		self.assertEqual(t1.load(tuple([4, '2013-10-11 11:02:45', None])), (4, datetime.datetime(2013, 10, 11, 11, 02, 45), None))
+
+		self.assertRaises(ValueError, t1.load, tuple([4, '2013-10-11 11:02:45']))
+		self.assertRaises(ValueError, t1.load, tuple([4, '2013-10-11T11:02:45', 'foo']))
+		self.assertRaises(ValueError, t1.load, tuple([True, '2013-10-11 11:02:45', 'foo']))
+		self.assertRaises(ValueError, t1.load, tuple([3, '2013-10-11 11:02:45', 'foo', None]))
+		self.assertRaises(ValueError, t1.load, [3, '2013-10-11 11:02:45', None])
+
+		self.assertEqual(t1.save(tuple([4, datetime.datetime(2013, 10, 11, 11, 02, 45), None])), (4, '2013-10-11 11:02:45', None))
+		self.assertEqual(t1.save(tuple([0, datetime.datetime(2013, 10, 11, 11, 02, 45), 'foo'])), (0, '2013-10-11 11:02:45', 'foo'))
+
+		self.assertRaises(ValueError, t1.save, tuple([4, datetime.datetime(2013, 10, 11, 11, 02, 45)]))
+		self.assertRaises(ValueError, t1.save, tuple([True, datetime.datetime(2013, 10, 11, 11, 02, 45), 'foo']))
+		self.assertRaises(ValueError, t1.save, tuple([3, datetime.datetime(2013, 10, 11, 11, 02, 45), 'foo', None]))
+		self.assertRaises(ValueError, t1.save, [3, datetime.datetime(2013, 10, 11, 11, 02, 45), None])
+
+		t2 = t1.format(typed.list)
+
+		self.assertEqual(t2.load([4, '2013-10-11 11:02:45', None]), (4, datetime.datetime(2013, 10, 11, 11, 02, 45), None))
+
+		self.assertRaises(ValueError, t2.load, tuple([4, '2013-10-11 11:02:45', None]))
+		self.assertRaises(ValueError, t2.load, 1)
+
+		self.assertEqual(t2.save(tuple([4, datetime.datetime(2013, 10, 11, 11, 02, 45), None])), [4, '2013-10-11 11:02:45', None])
+		self.assertEqual(t2.save(tuple([0, datetime.datetime(2013, 10, 11, 11, 02, 45), 'foo'])), [0, '2013-10-11 11:02:45', 'foo'])
+
+		self.assertRaises(ValueError, t2.save, [3, datetime.datetime(2013, 10, 11, 11, 02, 45), None])
+
+
+
 
 
 
