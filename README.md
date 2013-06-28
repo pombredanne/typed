@@ -105,9 +105,9 @@ Documentation
 
 The `typed` library currently supports the following types: `any`, `int`, `float`, `none`, `str`, `unicode`, `string`, `bool`, `date`, `datetime`, `list`, `dict` and `tuple`, as well as type unions and finite sets of values.
 
-All type support the method `t.test(obj)`, which returns `True` if the value conforms to the type, and `False` otherwise.
+All types support the method `t.test(obj)`, which returns `True` if the value conforms to the type, and `False` otherwise.
 
-All types also support methods `t.load(stored_obj)` and `t.save(obj)`, which are used for deserialization and serialization, respectively. The method `obj = t.load(stored_obj)` transforms the value from the specified format and adds all the necessary fields with default values, returning an object for which `t.test(obj)` return True. For any object that `t.test(obj)` return True, the method `t.save(obj)` will return an object appropriate for serialization in the format specified. If inappropriate object types are passed to methods `load` or `save`, a `ValueError` exception will be raised. Note that `load` and `save` might modify mutable objects, specifically `list`s and `dict`s, so that the statement `d = t.save(d)` is equivalent to `t.save(d)`.
+All types also support methods `t.load(stored_obj)` and `t.save(obj)`, which are used for deserialization and serialization, respectively. The method `obj = t.load(stored_obj)` transforms the value from the specified format and adds all the necessary fields with default values, returning an object for which `t.test(obj)` return True. For any object that `t.test(obj)` return True, the method `t.save(obj)` will return an object appropriate for serialization in the format specified. If inappropriate object types are passed to methods `load` or `save`, a `ValueError` exception will be raised. Note that `load` and `save` might modify mutable objects, specifically `list` and `dict` objects, so that the statement `d = t.save(d)` is equivalent to `t.save(d)`.
 
 
 ### Formatting
@@ -150,7 +150,7 @@ Specific types might support other formats as well.
 
 ### Type unions
 
-The `typed` library supports arbitrary type unions, formed using the `|` operator. A union of types `t1`, `t1`, ..., `t*n*` is a type which includes all values belonging to any of the types `t1`, `t2`, ..., `t*n*`.
+The `typed` library supports arbitrary type unions, formed using the `|` operator. A union of types `t1`, `t1`, ..., <code>t<i>n</i></code> is a type which includes all values belonging to any of the types `t1`, `t2`, ..., <code>t<i>n</i></code>.
 
 ```python
 t = typed.int | typed.string | typed.float
@@ -184,7 +184,7 @@ The `typed.none` type has a JSON-inspired alias `typed.null == typed.none`.
 
 #### `typed.str` type
 
-This is the `str` type of Python 2.x, and has an alias `typed.str == typed.ascii`.
+This is the `str` type of Python 2.x, and has an alias `typed.ascii == typed.str`.
 
 #### `typed.string` type
 
@@ -200,15 +200,15 @@ Its `format` method accepts standard Python datetime formatting strings.
 
 ####	`typed.set(values...)` type
 
-This type constructor accepts any number of values and then tests `True` for any of these values. For example, the `bool` type could be impleneted as `bool = typed.set(True, False)`.
+This type constructor accepts any number of values and produces a type which tests `True` for any of these values. For example, the `bool` type could be impleneted as `bool = typed.set(True, False)`.
 
 #### `typed.list(type)` type
 
-The type constructor `typed.list(t)` produces a type of arbitrary length lists, whose elements all have the type `t`. The `load` and `save` methods of this type modify the argument, which might produce unexpeced results in case of failure. This is also the reason you should take care when using `typed.list` in type unions.
+The type constructor `typed.list(t)` produces a type of arbitrary length lists, whose elements are all of type `t`. The `load` and `save` methods of this type modify the argument, which might produce unexpeced results in case of failure. This is also the reason you should take care when using `typed.list` in type unions.
 
 #### `typed.dict({'field': type, ...})` type
 
-This type constructor produces a type of dictionaries that have specified fields with values of specified types. Fields might be designated `optional` or have `defaul` values (all fields with `default` values are also `optional`). If `typed.dict` type is `trimmed`, it will include dictionaries with additional fields, and `load` and `save` methods will remove these fields. The `load` and `save` methods of this type modify the argument, which might produce unexpeced results in case of failure. This is also the reason you should take care when using `typed.dict` in type unions.
+This type constructor produces a type of dictionaries that have specified fields with values of specified types. Fields might be designated `optional` or have `defaul` values (all fields with `default` values are also `optional`). If `typed.dict` type is `trimmed`, it will accept dictionaries with additional fields, while `load` and `save` methods will remove these fields. The `load` and `save` methods of this type modify the argument, which might produce unexpeced results in case of failure. This is also the reason you should take care when using `typed.dict` in type unions.
 
 ```python
 t1 = typed.dict({
@@ -238,3 +238,4 @@ This type constructor produces the type of tuples that have elements of the spec
 t = typed.tuple(typed.string, typed.int, typed.float).format(typed.list).format(typed.json)
 
 assert t.load('["1", 2, 3.0]') == ('1', 2, 3.0)
+```
