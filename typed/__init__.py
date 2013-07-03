@@ -214,7 +214,7 @@ class DateFormatType(Type):
 		try:
 			return python.datetime.datetime.strptime(obj, self.fmt).date()
 		except TypeError, e:
-			raise ValueError(e.message)
+			raise ValueError(*e.args)
 
 	def save(self, obj):
 		if not date.test(obj):
@@ -247,7 +247,7 @@ class DatetimeFormatType(Type):
 		try:
 			return python.datetime.datetime.strptime(obj, self.fmt)
 		except TypeError, e:
-			raise ValueError(e.message)
+			raise ValueError(*e.args)
 
 	def save(self, obj):
 		if not isinstance(obj, python.datetime.datetime):
