@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 
-import datetime, json
+import datetime
+
+try:
+	import ujson as json
+	HAS_UJSON = True
+except ImportError:
+	import json
+	HAS_UJSON = False
 
 import unittest
 
@@ -550,6 +557,22 @@ class TestTypedLoadSave(unittest.TestCase):
 		self.assertEqual(t2.save({'d': 1, 'f': [1, 2, 3, 4]}), json.dumps({'d': 1, 'f': [1, 2, 3, 4]}))
 		self.assertEqual(t2.save({'d': 1, 'e': None, 'f': [1, 2, 3, 4], 'g': {'c': False}}), json.dumps({'d': 1, 'f': [1, 2, 3, 4]}))
 		self.assertEqual(t2.save({'d': 1, 'e': datetime.date(2013, 02, 15), 'f': [], 'g': {'a': datetime.datetime(2013, 10, 10, 05, 55, 50), 'b': None, 'c': True}}), json.dumps({'d': 1, 'e': '15/02/2013', 'f': [], 'g': json.dumps({'a': '2013-10-10 05:55:50', 'b': None, 'c': 1})}))
+
+		if HAS_UJSON:
+
+			t3 = typed.json(typed.dict({
+					'a': typed.int,
+					'b': typed.float,
+					'c': typed.list(typed.float),
+					'd': typed.dict({
+							'e': typed.list(typed.float),
+						}),
+				}), double_precision=4)
+
+			obj = {'a': 1, 'b': 0.0123456789, 'c': [0.00001, 0.00011, 0.00026], 'd': {'e': [10000.098765432, 123456.01001]}}
+			obj_json = '{"a": 1, "b": 0.0123, "c": [0.0, 0.0001, 0.0003], "d": {"e": [10000.0988, 123456.01]}}'
+
+			self.assertItemsEqual(t3.save(obj)[2:-1].split(',"'), obj_json.replace(' ', '')[2:-1].split(',"'))		# elements might come in different order
 
 
 	def test_tuple(self):

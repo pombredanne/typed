@@ -124,7 +124,7 @@ assert all([
 	])
 ```
 
-All types also support `json` format.
+All types also support the `json` format.
 
 ```python
 t1 = typed.json(typed.list(typed.int))
@@ -133,6 +133,18 @@ t2 = typed.dict({'a': typed.int}).format(typed.json)
 assert all([
 		t1.load('[1, 2, 3]') == [1, 2, 3], t1.save([1, 2, 3]) == '[1, 2, 3]',
 		t2.load('{"a": 1}') == {'a': 1}, t2.save({'a': 2}) == '{"a": 2}',
+	])
+```
+
+If available, the `typed.json` formatter uses the `ujson` library, otherwise it uses Python's own (slower) `json` serializer. If `ujson` serializer is used, `typed.json` supports an additional parameter `double_precision` that controls the number of float digits used when serializing floats.
+
+```python
+t1 = typed.json(typed.list(typed.float))
+t2 = typed.json(typed.list(typed.float), double_precision=3)
+
+assert all([
+		t1.save([0.0001, 0.0011, 0.0056, 12345.6789]) == '[0.0001,0.0011,0.0056,12345.6789]',
+		t2.save([0.0001, 0.0011, 0.0056, 12345.6789]) == '[0.0,0.001,0.006,12345.679]',
 	])
 ```
 

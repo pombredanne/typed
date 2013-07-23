@@ -19,7 +19,14 @@
 	assert datetime.datetime(2012, 12, 12, 12, 12, 12) == typed.datetime.format("%Y-%m-%d %H:%M:%S").cast('2012-12-12 12:12:12')
 """
 
-import types, datetime, json, itertools
+import types, datetime, itertools
+
+try:
+	import ujson as json
+	__HAS_UJSON__ = True
+except ImportError:
+	import json
+	__HAS_UJSON__ = False
 
 class O(object):
 	pass
@@ -447,10 +454,13 @@ class DictFormatType(Type):
 
 
 class JSONFormatType(Type):
-	__slots__ = ['type']
+	__slots__ = ['type', 'double_precision']
 
-	def __init__(self, type):
+	def __init__(self, type, double_precision=None):
+		if double_precision is not None and not __HAS_UJSON__:
+			raise NotImplementedError('double_precision is not supported since the `ujson` library is not available for import')
 		self.type = type
+		self.double_precision = double_precision
 
 	def test(self, obj):
 		return self.type.test(obj)
@@ -459,6 +469,8 @@ class JSONFormatType(Type):
 		return self.type.load(python.json.loads(obj))
 
 	def save(self, obj):
+		if self.double_precision is not None:
+			return python.json.dumps(self.type.save(obj), double_precision=self.double_precision)
 		return python.json.dumps(self.type.save(obj))
 
 
@@ -577,5 +589,5 @@ optional = any.optional
 def default(value):
 	return any.default(value)
 
-def json(type):
-	return JSONFormatType(type)
+def json(type, **kwargs):
+	return JSONFormatType(type, **kwargs)
