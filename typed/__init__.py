@@ -308,9 +308,9 @@ class DictType(Type):
 
 		num = 0
 		for field, type in self.fields.iteritems():
-			try:
+			if field in obj:
 				value = obj[field]
-			except KeyError:
+			else:
 				if isinstance(type, OptionalType):
 					continue
 				return False
@@ -330,9 +330,9 @@ class DictType(Type):
 
 		num = 0
 		for field, type in self.fields.iteritems():
-			try:
+			if field in obj:
 				value = obj[field]
-			except KeyError:
+			else:
 				if isinstance(type, DefaultType):
 					obj[field] = type.default_value
 					num += 1
@@ -360,9 +360,9 @@ class DictType(Type):
 
 		num = 0
 		for field, type in self.fields.iteritems():
-			try:
+			if field in obj:
 				value = obj[field]
-			except KeyError:
+			else:
 				if isinstance(type, OptionalType):
 					continue
 				raise ValueError('dict is missing field %s' % repr(field))
@@ -432,17 +432,17 @@ class DictFormatType(Type):
 		return self.type.test(obj)
 
 	def load(self, obj):
-		try:
+		if obj in self.load_dict:
 			val = self.load_dict[obj]
-		except KeyError:
+		else:
 			val = obj
 		return self.type.load(val)
 
 	def save(self, obj):
 		obj = self.type.save(obj)
-		try:
+		if obj in self.save_dict:
 			return self.save_dict[obj]
-		except KeyError:
+		else:
 			return obj
 
 
