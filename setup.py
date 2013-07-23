@@ -56,7 +56,7 @@ except ImportError:
 	from distutils.core import setup
 
 setup(name='typed',
-	version='0.1',
+	version='0.6',
 	url='http://github.com/zemanta/typed/',
 	author='Tom Primozic',
 	author_email='tom.primozic@zemanta.com',
